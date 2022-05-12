@@ -4,6 +4,7 @@ import { useQuery } from '@apollo/client';
 import { useStoreContext } from '../utils/GlobalState';
 import { REMOVE_FROM_CART, UPDATE_CART_QUANTITY, ADD_TO_CART, UPDATE_PRODUCTS } from '../utils/actions';
 import { QUERY_PRODUCTS } from '../utils/queries';
+import { idbPromise } from '../utils/helpers'
 import spinner from '../assets/spinner.gif';
 import Cart from '../components/Cart';
 
@@ -18,12 +19,18 @@ function Detail() {
     if (products.length) {
       setCurrentProduct(products.find((product) => product._id === id));
     } else if (data) {
-      dispatch({
-        type: UPDATE_PRODUCTS,
-        products: data.products,
+      dispatch({ type: UPDATE_PRODUCTS, products: data.products, });
+      //also add to indexDB
+      data.products.forEach((product) => {
+        idbPromise('products', 'put', product);
+      });
+    } else if (!loading) {
+      //gather from indexDB if offline
+      idbPromise('products', 'get').then((indexedProducts) => {
+        dispatch({ type: UPDATE_PRODUCTS, products: indexedProducts});
       });
     }
-  }, [products, data, dispatch, id]);
+  }, [products, data, loading, dispatch, id]);
 
   const addToCart = () => {
     const itemInCart = cart.find((cartItem) => cartItem._id === id);
@@ -34,16 +41,24 @@ function Detail() {
         _id: id,
         purchaseQuantity: parseInt(itemInCart.purchaseQuantity) + 1
       });
+      //also add to indexDB
+      idbPromise('cart', 'put', {
+        itemInCart, purchaseQuantity: parseInt(itemInCart.purchaseQuantity) + 1
+      });
     } else {
       dispatch({
         type: ADD_TO_CART,
         product: { ...currentProduct, purchaseQuantity: 1 }
       });
+      //also iDB
+      idbPromise('cart', 'put', { ...currentProduct, purchaseQuantity: 1 });
     }
   };
 
   const removeFromCart = () => {
     dispatch({ type: REMOVE_FROM_CART, _id: currentProduct._id });
+    //also iDB
+    idbPromise('cart', 'delete', { ...currentProduct });
   };
 
   return (
